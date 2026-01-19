@@ -2,9 +2,9 @@ using UnityEngine;
 
 public class GrapplingProjectile : MonoBehaviour
 {
-    public float speed = 25f;
-    public float maxDistance = 15f;
-    public float pullSpeed = 15f; // 에너미를 끌어당기는 속도
+    public float speed = 30f;
+    public float maxDistance = 5f;
+    public float pullSpeed = 100f; // 에너미를 끌어당기는 속도
 
     private Vector2 startPos;
     private Rigidbody2D rb;
