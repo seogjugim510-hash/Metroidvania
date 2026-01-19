@@ -95,7 +95,7 @@ public class GrapplingProjectile : MonoBehaviour
         if (playerCol != null && enemyCol != null)
             Physics2D.IgnoreCollision(playerCol, enemyCol, true);
 
-        float flySpeed = 30f; // 속도를 더 높여보세요
+        float flySpeed = 30f; // 속도
         float arrivalDistance = 1.0f; // 도착 판정 거리 (너무 짧으면 멈춤 현상 발생)
 
         // 도착할 때까지 반복

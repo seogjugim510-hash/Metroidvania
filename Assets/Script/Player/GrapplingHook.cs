@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public class GrapplingHook : MonoBehaviour
@@ -12,10 +13,16 @@ public class GrapplingHook : MonoBehaviour
     private GameObject currentProjectile;
     public bool isGrappling = false;
     private Vector2 anchorPoint;
+    private Coroutine lengthenCoroutine;
 
     [Header("거리 설정")]
     public float maxDistance = 15f; // [추가] 시각화 스크립트가 참조할 변수
     public float minDistance = 2f;
+
+    [Header("스윙 안전 설정")]
+    [SerializeField] private float safetyMargin = 2.5f; // 목표 공중 높이를 더 높게 잡습니다 (기존 1.5 -> 2.5 권장)
+    [SerializeField] private float shortenOffset = 0.5f; // 계산된 길이에서 추가로 더 줄일 미터(m)
+    [SerializeField] private LayerMask groundAndWallLayer; // 감지할 바닥 및 벽 레이어 마스크
 
     void Awake()
     {
@@ -66,17 +73,48 @@ public class GrapplingHook : MonoBehaviour
         joint.connectedAnchor = anchorPoint;
 
         float actualDistance = Vector2.Distance(transform.position, anchorPoint);
-        joint.distance = Mathf.Max(actualDistance, minDistance);
-        joint.enabled = true;
+        float verticalDist = Mathf.Abs(anchorPoint.y - transform.position.y);
 
-        // [추가] 진자 운동을 유도하기 위한 초기 충격
-        // 현재 속도가 너무 느리다면 진행 방향이나 아래쪽으로 힘을 살짝 줍니다.
-        if (rb.linearVelocity.magnitude < 2f)
+        // 1. 목표 길이 계산 (삼각함수 방식 유지)
+        float targetDistance = actualDistance;
+        RaycastHit2D groundHit = Physics2D.Raycast(transform.position, Vector2.down, safetyMargin + 1f, groundAndWallLayer);
+
+        if (groundHit.collider != null && groundHit.distance < safetyMargin)
         {
-            // 플레이어가 앵커보다 아래에 있다면 옆으로, 수평에 가깝다면 아래로
-            Vector2 pushDir = (transform.position.x < anchorPoint.x) ? Vector2.left : Vector2.right;
-            rb.AddForce((Vector2.down + pushDir).normalized * 3f, ForceMode2D.Impulse);
+            float heightToRaise = safetyMargin - groundHit.distance;
+            float cosTheta = Mathf.Max(verticalDist / actualDistance, 0.1f);
+            float targetVerticalDist = verticalDist - heightToRaise;
+
+            targetDistance = Mathf.Clamp(targetVerticalDist / cosTheta, minDistance, actualDistance);
         }
+
+        // 2. 물리 조인트 활성화 (현재 거리에서 시작)
+        joint.distance = actualDistance;
+        joint.enabled = true;
+        isGrappling = true;
+
+        // 3. 부드럽게 줄이기 시작 (코루틴)
+        if (lengthenCoroutine != null) StopCoroutine(lengthenCoroutine);
+        lengthenCoroutine = StartCoroutine(SmoothReel(targetDistance));
+
+        // 4. 초기 가속도 (솟구침이 문제라면 이 힘을 낮추거나 제거하세요)
+        rb.AddForce(Vector2.right * (transform.position.x < anchorPoint.x ? 3f : -3f), ForceMode2D.Impulse);
+    }
+
+    private IEnumerator SmoothReel(float targetLen)
+    {
+        float duration = 0.2f; // 0.2초 동안 부드럽게 줄어듦
+        float elapsed = 0f;
+        float startLen = joint.distance;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            // 선형 보간(Lerp)을 사용하여 길이를 서서히 변경
+            joint.distance = Mathf.Lerp(startLen, targetLen, elapsed / duration);
+            yield return null;
+        }
+        joint.distance = targetLen;
     }
 
     public bool IsHookActive()
