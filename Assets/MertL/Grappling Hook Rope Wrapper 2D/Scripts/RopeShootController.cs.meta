@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 59842607a6b41134190bdd1275b7e034
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 227849
+  packageName: Grappling Hook Rope Wrapper 2D
+  packageVersion: 1.0.0
+  assetPath: Assets/MertL/Grappling Hook Rope Wrapper 2D/Scripts/RopeShootController.cs
+  uploadId: 520656
