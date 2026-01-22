@@ -12,7 +12,7 @@ public class GrapplingProjectile : MonoBehaviour
     private GrapplingHook owner;
     private bool isHit = false;
 
-    // [추가] 플레이어 컨트롤러 참조를 위한 변수
+    // 플레이어 컨트롤러 참조를 위한 변수
     private PlayerController playerController;
 
     public void Initialize(GrapplingHook hook, Vector2 direction)

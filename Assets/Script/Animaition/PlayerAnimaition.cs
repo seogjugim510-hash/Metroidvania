@@ -9,54 +9,52 @@ public class PlayerAnimation : MonoBehaviour
     void Awake()
     {
         anim = GetComponent<Animator>();
-        rb = GetComponent<Rigidbody2D>();
-        move = GetComponent<PlayerController>();
+        rb = GetComponentInParent<Rigidbody2D>();
+        move = GetComponentInParent<PlayerController>();
     }
 
     void Update()
     {
-        if (move == null) return;
+        if (move == null || anim == null) return;
+        if (move.IsAttack) return;
 
-        bool wallSliding = move.IsWallSliding;
-
-        // 1. 애니메이터 파라미터 업데이트
         anim.SetFloat("Speed", Mathf.Abs(rb.linearVelocity.x));
-        anim.SetBool("IsWallSliding", wallSliding);
-
-        // 2. 대시 상태 (여기서 move.IsDashing 대문자 확인)
-        anim.SetBool("IsDashing", move.IsDashing);
-
-        // 3. 점프 및 더블 점프 로직
-        if (wallSliding)
+        if (!move.IsGrounded && !move.IsWallSliding)
         {
-            anim.SetBool("IsJumping", false);
-            anim.SetBool("IsJumping", false);
+            anim.SetBool("IsJump", true);
+            anim.SetBool("IsFall", rb.linearVelocity.y < -0.01f);
         }
         else
         {
-            anim.SetBool("IsJumping", !move.IsGrounded);
-            anim.SetBool("IsJumping", move.JumpCount >= 2);
+            anim.SetBool("IsJump", false);
+            anim.SetBool("IsFall", false);
         }
+        anim.SetBool("IsWallSliding", move.IsWallSliding);
+        anim.SetBool("IsDashing", move.IsDashing);
     }
-    public void PlayAttack()
+
+    public void PlayAttack(int step)
     {
-        // 공격 시 다른 공중 모션을 일시적으로 끄거나 우선순위를 높임
-        anim.SetBool("IsAttacking", true);
+        anim.SetBool("IsJump", false);
+        anim.SetBool("IsFall", false);
 
-        // 공격 중에는 점프/더블점프 파라미터를 잠시 꺼서 공격 애니메이션이 나오게 유도
-        anim.SetBool("IsJumping", false);
-        anim.SetBool("IsJumping", false);
+        // ComboStep을 먼저 설정하고 IsAttack 트리거를 켜야 함
+        anim.SetInteger("ComboStep", step);
+        anim.SetBool("IsAttack", true);
 
-        CancelInvoke("StopAttack"); // 이전 Invoke가 있다면 취소
-        Invoke("StopAttack", 0.3f);
+        CancelInvoke("StopAttack");
+        // 콤보가 부드럽게 이어지려면 StopAttack(IsAttack=false)을 쿨타임보다 약간 더 길게 설정
+        Invoke("StopAttack", 0.45f);
     }
 
     private void StopAttack()
     {
-        anim.SetBool("IsAttacking", false);
+        anim.SetBool("IsAttack", false);
+        // 여기서 ComboStep을 0으로 만들지 마세요 (콤보 윈도우 유지를 위해)
     }
+
     public void PlayDie()
     {
-        anim.SetTrigger("IsDead");
+        anim.SetBool("IsDead", true);
     }
 }

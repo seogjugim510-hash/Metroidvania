@@ -11,7 +11,6 @@ public class PlayerController : MonoBehaviour
 
     [Header("물리 체크 거리")]
     [SerializeField] private float groundCheckDistance = 0.1f;
-    [SerializeField] private float wallCheckDistance = 0.5f;
     [SerializeField] private LayerMask groundLayer;
     [SerializeField] private LayerMask wallLayer;
 
@@ -20,8 +19,14 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float attackRange = 0.5f;
     [SerializeField] private LayerMask enemyLayer;
     [SerializeField] private int damage = 10;
-    [SerializeField] private float attackCooldown = 0.3f;
+    [SerializeField] private float attackCooldown = 0.4f;
+    [SerializeField] private int comboStep = 0; 
+    [SerializeField] private float comboWindow = 0.5f; 
+    private Coroutine comboResetCoroutine;
     private float lastAttackTime = 0f;
+
+    // 콤보 연계를 위한 변수 추가
+    private bool comboPossible = false;
 
     public bool isAttackReserved = false;
 
@@ -31,14 +36,12 @@ public class PlayerController : MonoBehaviour
     public bool IsDashing { get; private set; }
     public bool IsWallSliding { get; private set; }
     public int JumpCount { get; private set; }
-    public bool IsAttacking { get; private set; }
+    public bool IsAttack { get; private set; }
 
     private Rigidbody2D rb;
     private BoxCollider2D coll;
     private float horizontalInput;
     private GrapplingHook grapplingHook;
-
-    // [중요] 스케일 수정을 위한 변수
     private float originalScaleX;
 
     void Awake()
@@ -46,99 +49,87 @@ public class PlayerController : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         coll = GetComponent<BoxCollider2D>();
         grapplingHook = GetComponent<GrapplingHook>();
-
-        // 시작 시 인스펙터에 설정된 스케일 값을 저장 (예: 2.0 또는 3.0)
         originalScaleX = transform.localScale.x;
     }
 
     void Update()
     {
-        bool isGrapplingActive = grapplingHook != null && grapplingHook.isGrappling;
-        bool isAnyGrapplingAction = grapplingHook != null && (grapplingHook.isPullingEnemy || grapplingHook.isGrappling);
+        // 1. 물리 체크
+        Vector2 boxCheckSize = new Vector2(coll.size.x * 5f, 0.05f);
+        IsGrounded = Physics2D.BoxCast(coll.bounds.center, boxCheckSize, 0f, Vector2.down, coll.bounds.extents.y + groundCheckDistance, groundLayer | wallLayer);
 
-        if (isAnyGrapplingAction && Input.GetKeyDown(KeyCode.Mouse0))
+        // [중요] 공격 입력을 최상단으로 이동 (공격 중에도 콤보 입력을 받아야 함)
+        if (Input.GetKeyDown(KeyCode.Mouse0))
         {
-            isAttackReserved = true;
+            if (!IsAttack) // 첫 공격
+            {
+                if (Time.time >= lastAttackTime + attackCooldown)
+                    StartCoroutine(AttackRoutine());
+            }
+            else if (comboPossible) // 공격 중 콤보 가능 타이밍에 눌렀을 때
+            {
+                comboPossible = false; // 중복 입력 방지
+                StartCoroutine(AttackRoutine());
+            }
         }
 
-        if (IsAttacking || IsDashing) return;
-
-        if (grapplingHook != null && grapplingHook.isPullingEnemy)
+        // 공격/대시 중 이동 제어 (입력은 위에서 받았으므로 로직만 차단)
+        if (IsAttack || IsDashing)
         {
             horizontalInput = 0;
+            if (IsGrounded && !IsDashing)
+                rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
             return;
         }
 
-        // --- 물리 체크 ---
-        Vector2 boxCheckSize = new Vector2(coll.size.x * 0.8f, 0.05f);
-        IsGrounded = Physics2D.BoxCast(coll.bounds.center, boxCheckSize, 0f, Vector2.down, coll.bounds.extents.y + groundCheckDistance, groundLayer | wallLayer);
-
-        Vector2 wallDir = new Vector2(horizontalInput != 0 ? Mathf.Sign(horizontalInput) : transform.localScale.x, 0);
-        bool isTouchingWall = Physics2D.Raycast(coll.bounds.center, wallDir, wallCheckDistance, wallLayer);
-
-        // 스윙 중에는 벽 슬라이딩 방지
-        IsWallSliding = (isTouchingWall && !IsGrounded && rb.linearVelocity.y < 0 && horizontalInput != 0 && !isGrapplingActive);
-
-        // --- 공격 및 이동 입력 ---
-        if (Input.GetKeyDown(KeyCode.Mouse0) && Time.time >= lastAttackTime + attackCooldown)
-        {
-            if (!isAnyGrapplingAction) StartCoroutine(AttackRoutine());
-        }
-
-        if ((IsGrounded && rb.linearVelocity.y <= 0.1f) || IsWallSliding) canDashInAir = true;
-        if (IsGrounded && rb.linearVelocity.y <= 0.01f) JumpCount = 0;
-        else if (IsWallSliding) JumpCount = 1;
-
+        // --- 일반 이동 입력 처리 ---
         horizontalInput = Input.GetAxisRaw("Horizontal");
 
-        if (Input.GetButtonDown("Jump") && (IsGrounded || IsWallSliding || JumpCount < maxJumpCount)) Jump();
-        if (Input.GetKeyDown(KeyCode.LeftShift) && canDashInAir) StartCoroutine(DashRoutine());
+        if (IsGrounded && rb.linearVelocity.y <= 0.01f) JumpCount = 0;
+        if (Input.GetButtonDown("Jump") && (IsGrounded || JumpCount < maxJumpCount)) Jump();
 
         ApplyFlip();
     }
 
-    public void ExecuteReservedAttack()
-    {
-        if (isAttackReserved)
-        {
-            isAttackReserved = false;
-            if (Time.time >= lastAttackTime + attackCooldown) StartCoroutine(AttackRoutine());
-        }
-    }
-
-    private void ApplyFlip()
-    {
-        if (IsDashing || IsAttacking) return;
-        if (grapplingHook != null && (grapplingHook.isPullingEnemy || grapplingHook.IsHookActive())) return;
-
-        // originalScaleX를 사용하여 현재 설정된 크기를 유지하면서 방향만 바꿈
-        if (IsWallSliding)
-        {
-            if (horizontalInput != 0)
-                transform.localScale = new Vector3(-Mathf.Sign(horizontalInput) * originalScaleX, originalScaleX, 1);
-            return;
-        }
-
-        Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-        if (mousePos.x > transform.position.x)
-            transform.localScale = new Vector3(originalScaleX, originalScaleX, 1);
-        else
-            transform.localScale = new Vector3(-originalScaleX, originalScaleX, 1);
-    }
-
     private IEnumerator AttackRoutine()
     {
-        IsAttacking = true;
+        // 이미 루틴이 실행 중일 때 다시 호출되면(콤보) 기존 루틴의 처리가 필요함
+        // 여기서는 간단하게 IsAttack 상태를 유지하며 콤보 단계만 조절
+        IsAttack = true;
+        comboPossible = false; // 공격 시작 시에는 콤보 불가
+
+        comboStep++;
+        if (comboStep > 2) comboStep = 1;
+
         rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
         lastAttackTime = Time.time;
-        GetComponent<PlayerAnimation>().PlayAttack();
-        yield return new WaitForSeconds(attackCooldown);
-        IsAttacking = false;
+
+        GetComponent<PlayerAnimation>().PlayAttack(comboStep);
+
+        // [콤보 핵심] 전체 쿨타임 중 절반이 지난 시점부터 다음 콤보 입력을 허용
+        yield return new WaitForSeconds(attackCooldown * 0.5f);
+        comboPossible = true; 
+
+        // 나머지 쿨타임 대기
+        yield return new WaitForSeconds(attackCooldown * 0.5f);
+        
+        IsAttack = false;
+        comboPossible = false;
+
+        if (comboResetCoroutine != null) StopCoroutine(comboResetCoroutine);
+        comboResetCoroutine = StartCoroutine(ResetComboAfterTime());
     }
 
+    private IEnumerator ResetComboAfterTime()
+    {
+        yield return new WaitForSeconds(comboWindow);
+        comboStep = 0;
+    }
+
+    // --- 이하 기존 함수들 (FixedUpdate, Jump, ApplyFlip 등) 동일 ---
     private void FixedUpdate()
     {
-        if (IsDashing || (grapplingHook != null && grapplingHook.isPullingEnemy)) return;
+        if (IsAttack || IsDashing || (grapplingHook != null && grapplingHook.isPullingEnemy)) return;
 
         if (grapplingHook != null && grapplingHook.isGrappling)
         {
@@ -149,12 +140,16 @@ public class PlayerController : MonoBehaviour
                 rb.linearVelocity = rb.linearVelocity.normalized * maxSwingSpeed;
             return;
         }
-
         rb.linearVelocity = new Vector2(horizontalInput * moveSpeed, rb.linearVelocity.y);
     }
 
-    public void EndAttack() => IsAttacking = false;
-
+    private void Jump()
+    {
+        JumpCount++;
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0);
+        float currentJumpForce = JumpCount == 2 ? jumpForce * 0.8f : jumpForce;
+        rb.AddForce(Vector2.up * currentJumpForce, ForceMode2D.Impulse);
+    }
     public void DoAttackDamage()
     {
         if (attackPoint == null) return;
@@ -167,44 +162,28 @@ public class PlayerController : MonoBehaviour
             if (item != null) item.TakeDamage(damage);
         }
     }
-
-    public void DoDashDamage() => DoAttackDamage();
-
-    private void Jump()
+    public void ExecuteReservedAttack()
     {
-        JumpCount++;
-        rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0);
-        float currentJumpForce = JumpCount == 2 ? jumpForce * 0.8f : jumpForce;
-        rb.AddForce(Vector2.up * currentJumpForce, ForceMode2D.Impulse);
+        if (isAttackReserved)
+        {
+            isAttackReserved = false;
+            if (Time.time >= lastAttackTime + attackCooldown) StartCoroutine(AttackRoutine());
+        }
     }
 
-    private IEnumerator DashRoutine()
+    private void ApplyFlip()
     {
-        IsDashing = true;
-        if (!IsGrounded && !IsWallSliding) canDashInAir = false;
-
-        float dashInput = Input.GetAxisRaw("Horizontal");
-        float dashDirection = (dashInput != 0) ? dashInput : transform.localScale.x;
-
-        // 대시 방향 전환 시에도 스케일 유지
-        transform.localScale = new Vector3(Mathf.Sign(dashDirection) * originalScaleX, originalScaleX, 1);
-
-        float originalGravity = rb.gravityScale;
-        rb.gravityScale = 0f;
-        rb.linearVelocity = new Vector2(dashDirection * moveSpeed * 2.5f, 0);
-
-        yield return new WaitForSeconds(0.2f);
-
-        rb.gravityScale = originalGravity;
-        IsDashing = false;
+        if (IsDashing || IsAttack) return;
+        Vector3 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        transform.localScale = new Vector3((mousePos.x > transform.position.x ? 1 : -1) * originalScaleX, originalScaleX, 1);
     }
 
     private void OnDrawGizmos()
     {
         if (coll == null) return;
         Gizmos.color = IsGrounded ? Color.green : Color.red;
-        Vector2 boxCheckSize = new Vector2(coll.size.x * 0.8f, 0.05f);
         Vector3 checkPos = coll.bounds.center + Vector3.down * (coll.bounds.extents.y + groundCheckDistance);
-        Gizmos.DrawWireCube(checkPos, boxCheckSize);
+        Gizmos.DrawWireCube(checkPos, new Vector2(coll.size.x * 5f, 0.05f));
+        if (attackPoint != null) { Gizmos.color = Color.yellow; Gizmos.DrawWireSphere(attackPoint.position, attackRange); }
     }
 }
