@@ -39,9 +39,8 @@ public class PlayerHealth : MonoBehaviour
     private IEnumerator DieRoutine()
     {
         isDead = true;
-        Debug.Log("플레이어 사망 애니메이션 재생");
 
-        // 1. 플레이어 조작 및 물리 중지
+        // 1. 조작 및 물리 완전 정지
         PlayerController controller = GetComponent<PlayerController>();
         if (controller != null) controller.enabled = false;
 
@@ -49,25 +48,19 @@ public class PlayerHealth : MonoBehaviour
         if (rb != null)
         {
             rb.linearVelocity = Vector2.zero;
-            rb.gravityScale = 0f; // 추락 중이라면 멈추게 함
+            rb.angularVelocity = 0f; // 회전 정지
+            rb.bodyType = RigidbodyType2D.Kinematic; // [추가] 외부 물리 영향 차단
         }
 
-        // 2. 사망 애니메이션 재생 (PlayerAnimation 스크립트에 PlayDie가 있다고 가정)
+        // 2. 애니메이션 실행
         PlayerAnimation anim = GetComponent<PlayerAnimation>();
-        if (anim != null)
-        {
-            anim.PlayDie(); // 애니메이션 파라미터 Trigger "Die" 등을 실행
-        }
+        if (anim != null) anim.PlayDie();
 
-        // 3. 애니메이션이 재생될 시간 동안 대기 (예: 1.5초)
-        // Time.timeScale이 0이 되어도 돌아가도록 WaitForSecondsRealtime 사용
-        yield return new WaitForSeconds(1.5f);
+        // 3. 1.5초 대기 (이 시간 동안은 사망 애니메이션만 재생됨)
+        yield return new WaitForSeconds(1.0f);
 
-        // 4. 게임 오버 UI 띄우기
-        if (gameOverManager != null)
-        {
-            gameOverManager.OnPlayerDeath();
-        }
+        // 4. 게임 오버 UI
+        if (GameOverManager.Instance != null) GameOverManager.Instance.OnPlayerDeath();
     }
 
     public void UpdateUI()

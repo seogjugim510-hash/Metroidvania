@@ -5,6 +5,7 @@ public class PlayerAnimation : MonoBehaviour
     private Animator anim;
     private Rigidbody2D rb;
     private PlayerController move;
+    private bool isDead = false;
 
     void Awake()
     {
@@ -16,6 +17,7 @@ public class PlayerAnimation : MonoBehaviour
     void Update()
     {
         if (move == null || anim == null) return;
+        if (isDead) return;
         if (move.IsAttack) return;
 
         anim.SetFloat("Speed", Mathf.Abs(rb.linearVelocity.x));
@@ -55,6 +57,13 @@ public class PlayerAnimation : MonoBehaviour
 
     public void PlayDie()
     {
+        isDead = true; // 플래그 설정
         anim.SetBool("IsDead", true);
+
+        // [추가] 혹시 모를 다른 파라미터 방해 제거
+        anim.SetFloat("Speed", 0);
+        anim.SetBool("IsAttack", false);
+        anim.SetBool("IsJump", false);
+        anim.SetBool("IsFall", false);
     }
 }

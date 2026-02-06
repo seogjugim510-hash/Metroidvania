@@ -156,9 +156,9 @@ public class EnemyAllyAI : MonoBehaviour
 
         if (gameObject.CompareTag("BigEnemy"))
         {
-            if (gameClearManager != null)
+            if (GameClearManager.Instance != null)
             {
-                Invoke("TriggerClearUI", 1.5f);
+                GameClearManager.Instance.OnGameClear();
             }
         }
     }

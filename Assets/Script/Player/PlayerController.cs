@@ -23,6 +23,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private int comboStep = 0; 
     [SerializeField] private float comboWindow = 0.5f; 
     private Coroutine comboResetCoroutine;
+    private bool comboReserved = false; // 다음 콤보 예약 플래그
     private float lastAttackTime = 0f;
 
     // 콤보 연계를 위한 변수 추가
@@ -58,18 +59,17 @@ public class PlayerController : MonoBehaviour
         Vector2 boxCheckSize = new Vector2(coll.size.x * 5f, 0.05f);
         IsGrounded = Physics2D.BoxCast(coll.bounds.center, boxCheckSize, 0f, Vector2.down, coll.bounds.extents.y + groundCheckDistance, groundLayer | wallLayer);
 
-        // [중요] 공격 입력을 최상단으로 이동 (공격 중에도 콤보 입력을 받아야 함)
         if (Input.GetKeyDown(KeyCode.Mouse0))
         {
-            if (!IsAttack) // 첫 공격
+            if (!IsAttack)
             {
-                if (Time.time >= lastAttackTime + attackCooldown)
-                    StartCoroutine(AttackRoutine());
-            }
-            else if (comboPossible) // 공격 중 콤보 가능 타이밍에 눌렀을 때
-            {
-                comboPossible = false; // 중복 입력 방지
+                // 첫 공격 시작
                 StartCoroutine(AttackRoutine());
+            }
+            else if (comboPossible && !comboReserved)
+            {
+                // 공격 중이고 콤보 가능 타이밍일 때 클릭하면 '예약'
+                comboReserved = true;
             }
         }
 
@@ -93,37 +93,48 @@ public class PlayerController : MonoBehaviour
 
     private IEnumerator AttackRoutine()
     {
-        // 이미 루틴이 실행 중일 때 다시 호출되면(콤보) 기존 루틴의 처리가 필요함
-        // 여기서는 간단하게 IsAttack 상태를 유지하며 콤보 단계만 조절
         IsAttack = true;
-        comboPossible = false; // 공격 시작 시에는 콤보 불가
+        comboReserved = false;
+        comboPossible = false;
 
+        // 콤보 단계 설정
         comboStep++;
         if (comboStep > 2) comboStep = 1;
 
+        // 물리 정지 및 애니메이션 재생
         rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
         lastAttackTime = Time.time;
-
         GetComponent<PlayerAnimation>().PlayAttack(comboStep);
 
-        // [콤보 핵심] 전체 쿨타임 중 절반이 지난 시점부터 다음 콤보 입력을 허용
-        yield return new WaitForSeconds(attackCooldown * 0.5f);
-        comboPossible = true; 
+        // [중요] 애니메이션이 절반 정도 진행되었을 때부터 클릭 입력 허용 (선입력 윈도우)
+        float windowStart = attackCooldown * 0.4f;
+        yield return new WaitForSeconds(windowStart);
+        comboPossible = true;
 
         // 나머지 쿨타임 대기
-        yield return new WaitForSeconds(attackCooldown * 0.5f);
-        
-        IsAttack = false;
-        comboPossible = false;
+        yield return new WaitForSeconds(attackCooldown - windowStart);
 
-        if (comboResetCoroutine != null) StopCoroutine(comboResetCoroutine);
-        comboResetCoroutine = StartCoroutine(ResetComboAfterTime());
+        // 만약 쿨타임이 끝났을 때 예약된 클릭이 있다면 즉시 다음 콤보 실행
+        if (comboReserved)
+        {
+            StartCoroutine(AttackRoutine());
+        }
+        else
+        {
+            // 예약된 클릭이 없으면 공격 상태 종료
+            IsAttack = false;
+            comboPossible = false;
+
+            if (comboResetCoroutine != null) StopCoroutine(comboResetCoroutine);
+            comboResetCoroutine = StartCoroutine(ResetComboAfterTime());
+        }
     }
 
     private IEnumerator ResetComboAfterTime()
     {
         yield return new WaitForSeconds(comboWindow);
-        comboStep = 0;
+        // 콤보 윈도우가 끝나면 스테이지 초기화 (0으로 돌아감)
+        if (!IsAttack) comboStep = 0;
     }
 
     // --- 이하 기존 함수들 (FixedUpdate, Jump, ApplyFlip 등) 동일 ---

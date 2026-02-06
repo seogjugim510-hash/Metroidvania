@@ -5,7 +5,7 @@ public class HealthUI : MonoBehaviour
 {
     [SerializeField] private GameObject heartPrefab;
     [SerializeField] private Transform heartContainer;
-    [SerializeField] private int maxHearts = 3; // 최대 체력에 따른 하트 개수 (예: 30이면 3개)
+    [SerializeField] private int maxHearts = 10; // 최대 체력에 따른 하트 개수 (예: 30이면 3개)
 
     private List<GameObject> hearts = new List<GameObject>();
 

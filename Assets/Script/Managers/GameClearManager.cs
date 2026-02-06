@@ -1,33 +1,62 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections; // 코루틴 사용을 위해 필요
 
 public class GameClearManager : MonoBehaviour
 {
+    public static GameClearManager Instance { get; private set; }
+
     [Header("UI 패널")]
-    [SerializeField] private GameObject gameClearPanel; // 게임클리어 시 나타날 부모 오브젝트
+    [SerializeField] private GameObject gameClearPanel;
+    [SerializeField] private float delayTime = 1.0f; // 지연 시간 설정
 
     void Awake()
     {
-        // 시작할 때는 클리어 창을 숨깁니다.
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         if (gameClearPanel != null)
             gameClearPanel.SetActive(false);
     }
 
-    // 빅에너미가 죽었을 때 호출될 함수
+    // 외부에서 호출하는 함수
     public void OnGameClear()
     {
-        gameClearPanel.SetActive(true); // 클리어 UI 출력
-        Time.timeScale = 0f; // 게임 일시정지
+        // 직접 UI를 켜는 대신 코루틴을 실행합니다.
+        StartCoroutine(ShowClearPanelWithDelay());
     }
 
-    // 다음 스테이지로 이동 (씬 빌드 순서상 다음 씬)
+    // 실질적으로 1초 뒤에 UI를 띄우는 로직
+    private IEnumerator ShowClearPanelWithDelay()
+    {
+        // 지정된 시간(1.0초)만큼 대기
+        yield return new WaitForSeconds(delayTime);
+
+        if (gameClearPanel != null)
+        {
+            gameClearPanel.SetActive(true);
+
+            // UI가 뜬 후에 게임을 멈춥니다.
+            Time.timeScale = 0f;
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+    }
+
     public void ClickRestart()
     {
-        Time.timeScale = 1f; // 일시정지 해제
+        Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
-    // 메인 메뉴 버튼
     public void ClickMainMenu()
     {
         Time.timeScale = 1f;

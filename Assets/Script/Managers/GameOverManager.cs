@@ -1,37 +1,68 @@
 using UnityEngine;
-using UnityEngine.SceneManagement; // 씬 전환용
-using UnityEngine.UI; // UI 제어용 (필요 시)
+using UnityEngine.SceneManagement;
+using System.Collections; // 코루틴 사용을 위해 필수
 
 public class GameOverManager : MonoBehaviour
 {
+    // --- 싱글톤 인스턴스 ---
+    public static GameOverManager Instance { get; private set; }
+
     [Header("UI 패널")]
-    [SerializeField] private GameObject gameOverPanel; // 게임오버 시 나타날 부모 오브젝트
+    [SerializeField] private GameObject gameOverPanel;
+    [SerializeField] private float delayTime = 1.0f; // 게임오버 UI 지연 시간
 
     void Awake()
     {
-        // 시작할 때는 게임오버 창을 숨깁니다.
+        // 싱글톤 초기화
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
+
         if (gameOverPanel != null)
             gameOverPanel.SetActive(false);
     }
 
-    // 플레이어가 죽었을 때 호출될 함수
+    // 플레이어가 죽었을 때 외부(PlayerHealth 등)에서 호출할 함수
     public void OnPlayerDeath()
     {
-        gameOverPanel.SetActive(true); // UI 출력
-        Time.timeScale = 0f; // 게임 일시정지 (선택 사항)
+        // 이미 게임오버가 진행 중이면 중복 실행 방지
+        if (gameOverPanel.activeSelf) return;
+
+        StartCoroutine(ShowGameOverPanelWithDelay());
     }
 
-    // 다시 시작 버튼 (현재 씬 재로드)
+    private IEnumerator ShowGameOverPanelWithDelay()
+    {
+        // 1. 플레이어의 죽는 모습을 볼 수 있도록 잠시 대기
+        yield return new WaitForSeconds(delayTime);
+
+        // 2. UI 활성화
+        if (gameOverPanel != null)
+        {
+            gameOverPanel.SetActive(true);
+
+            // 3. 게임 정지 및 커서 활성화
+            Time.timeScale = 0f;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+    }
+
     public void ClickRestart()
     {
-        Time.timeScale = 1f; // 일시정지 해제
+        Time.timeScale = 1f; // 반드시 1로 복구해야 씬이 흐릅니다.
         SceneManager.LoadScene(SceneManager.GetActiveScene().name);
     }
 
-    // 메인 메뉴 버튼
     public void ClickMainMenu()
     {
-        Time.timeScale = 1f; // 일시정지 해제
-        SceneManager.LoadScene("Mainmenu"); // 메인메뉴 씬 이름으로 수정하세요
+        Time.timeScale = 1f;
+        SceneManager.LoadScene("Mainmenu");
     }
 }

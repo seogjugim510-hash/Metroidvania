@@ -43,8 +43,20 @@ TagManager:
   - 
   - 
   m_SortingLayers:
+  - name: backGruond
+    uniqueID: 1594578673
+    locked: 0
   - name: Default
     uniqueID: 0
+    locked: 0
+  - name: UIbackGruond
+    uniqueID: 3628188119
+    locked: 0
+  - name: UI
+    uniqueID: 1240259207
+    locked: 0
+  - name: UIdo
+    uniqueID: 494772001
     locked: 0
   m_RenderingLayers:
   - Default
